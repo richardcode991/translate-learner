@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "英文翻译学习助手",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "划词翻译 · AI 深度讲解（词根/语法/例句）· 双语对照沉浸式阅读 · 生词本与卡片复习——边读边学英语。",
   "permissions": ["storage", "sidePanel", "offscreen"],
   "host_permissions": [

@@ -28,6 +28,7 @@
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
   let enabled = false;
+  let autoMode = false; // false=逐段按钮翻译（默认） true=整页自动翻译
   let observer = null;
   let scanTimer = null;
 
@@ -42,7 +43,12 @@
     `position:relative;z-index:1;}` +
     `.tl-bi-speak{border:none;background:transparent;cursor:pointer;` +
     `font-size:.9em;opacity:.55;padding:0 4px;vertical-align:baseline;}` +
-    `.tl-bi-speak:hover{opacity:1;}`;
+    `.tl-bi-speak:hover{opacity:1;}` +
+    // 逐段翻译按钮（手动模式）
+    `.tl-bi-btn{margin:0 0 0 6px;padding:0 6px;font-size:11px;line-height:16px;` +
+    `border:1px solid #b9d3ef;border-radius:4px;background:#eef5fd;color:#3f6ea5;` +
+    `cursor:pointer;opacity:.45;vertical-align:baseline;font-family:inherit;}` +
+    `.tl-bi-btn:hover{opacity:1;background:#e2eefb;}`;
   document.documentElement.appendChild(style);
 
   // 行内元素：段内的 a/span/b/em 等不应独立成块，需并入所在段落一起翻译
@@ -51,13 +57,20 @@
       'FONT BIG DEL INS DATA BDI BDO OUTPUT TT VAR WBR RUBY RT RP').split(' ')
   );
 
+  // 取块文本：排除我们注入的「译」按钮文字（否则短段落会被误判为中文块）
+  function blockText(el) {
+    let t = norm(el.innerText);
+    if (el.querySelector('.tl-bi-btn')) t = t.replace(/译\s*$/, '').trim();
+    return t;
+  }
+
   function isTranslatable(el) {
     if (el.dataset.tlBi === '1' || el.dataset.tlBi === 'skip') return false;
     if (el === document.body || el === document.documentElement) return false;
     if (el.closest(SKIP_SEL)) return false;
     // 容器元素交给子元素处理
     if (el.querySelector(BLOCK_CHILDREN)) return false;
-    const text = norm(el.innerText);
+    const text = blockText(el);
     if (text.length < 6 || text.length > 5000) return false;
     // 中文字符占比高则视为中文块（永久标记）；英文字母需占 30% 以上
     const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
@@ -229,16 +242,16 @@
 
   async function translateEl(el) {
     try {
-      if (!el.isConnected || el.dataset.tlBi === '1') return;
-      const text = norm(el.innerText);
-      if (!text) return;
+      if (!el.isConnected || el.dataset.tlBi === '1') return false;
+      const text = blockText(el);
+      if (!text) return false;
       const res = await chrome.runtime.sendMessage({ type: 'PARA', text }).catch(() => null);
       if (!res || !res.ok || !res.translation) {
         // 翻译失败：释放去重键，后续重扫可再次尝试
         translatedTexts.delete(norm(el.textContent));
-        return;
+        return false;
       }
-      if (!el.isConnected || el.dataset.tlBi === '1') return;
+      if (!el.isConnected || el.dataset.tlBi === '1') return false;
       const div = document.createElement('div');
       div.className = CLS;
       const span = document.createElement('span');
@@ -295,15 +308,54 @@
         }
       }
       el.dataset.tlBi = '1';
+      return true;
     } catch {
       // 静默忽略单个块失败
+      return false;
+    }
+  }
+
+  // ---------- 逐段翻译按钮（默认模式） ----------
+  // 双语开启后不自动整页翻译，只在每个可翻译段落末尾挂一个「译」按钮，
+  // 用户点击哪段才翻哪段——按需请求，避免触发接口限流（429）
+  function attachButton(el) {
+    if (el.dataset.tlBiBtn || el.dataset.tlBi) return;
+    el.dataset.tlBiBtn = '1';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tl-bi-btn';
+    b.textContent = '译';
+    b.title = '翻译此段';
+    for (const evt of ['click', 'pointerdown', 'mousedown', 'mouseup', 'auxclick']) {
+      b.addEventListener(evt, (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (evt === 'click') onTranslateClick(el, b);
+      });
+    }
+    el.appendChild(b);
+  }
+
+  async function onTranslateClick(el, btn) {
+    btn.remove();
+    delete el.dataset.tlBiBtn;
+    const ok = await translateEl(el);
+    if (!ok) attachButton(el); // 失败恢复按钮，可再次点击重试
+  }
+
+  // 按当前模式处理候选块：自动翻译 或 挂按钮
+  function render(list) {
+    for (const el of list) {
+      if (el.dataset.tlBi) continue;
+      if (autoMode) enqueue(el);
+      else attachButton(el);
     }
   }
 
   function apply(on) {
     enabled = on;
     if (on) {
-      collectCandidates(document.body).forEach(enqueue);
+      render(collectCandidates(document.body));
       // 累积 mutation 涉及的根节点，防抖后统一重扫
       // （回调里的 muts 数组每批独立，直接在回调里防抖会丢失前几批的节点）
       const pendingRoots = new Set();
@@ -327,9 +379,7 @@
         scanTimer = setTimeout(() => {
           if (!enabled) return;
           for (const r of pendingRoots) {
-            collectCandidates(r).forEach((el) => {
-              if (!el.dataset.tlBi) enqueue(el);
-            });
+            render(collectCandidates(r));
           }
           pendingRoots.clear();
         }, 600);
@@ -345,7 +395,11 @@
       observer = null;
       stopCurrent(); // 停掉正在播放的朗读
       document.querySelectorAll('.' + CLS).forEach((n) => n.remove());
+      document.querySelectorAll('.tl-bi-btn').forEach((n) => n.remove());
       document.querySelectorAll('[data-tl-bi]').forEach((n) => delete n.dataset.tlBi);
+      document
+        .querySelectorAll('[data-tl-bi-btn]')
+        .forEach((n) => delete n.dataset.tlBiBtn);
       document
         .querySelectorAll('[data-tl-queued]')
         .forEach((n) => delete n.dataset.tlQueued);
@@ -354,14 +408,27 @@
     }
   }
 
-  // 恢复上次的全局开关状态
-  chrome.storage.local.get('bilingualEnabled', ({ bilingualEnabled }) => {
+  // 恢复上次的开关状态与双语模式
+  chrome.storage.local.get(['bilingualEnabled', 'settings'], ({ bilingualEnabled, settings }) => {
+    autoMode = !!(settings && settings.bilingualAuto);
     if (bilingualEnabled && !enabled) apply(true);
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.bilingualEnabled) {
+    if (area !== 'local') return;
+    if (changes.bilingualEnabled) {
       const v = !!changes.bilingualEnabled.newValue;
       if (v !== enabled) apply(v);
+    }
+    if (changes.settings) {
+      const nextAuto = !!(changes.settings.newValue && changes.settings.newValue.bilingualAuto);
+      if (nextAuto !== autoMode) {
+        autoMode = nextAuto;
+        // 模式切换：重建（清掉按钮/译文，按新模式重新处理）
+        if (enabled) {
+          apply(false);
+          apply(true);
+        }
+      }
     }
   });
 

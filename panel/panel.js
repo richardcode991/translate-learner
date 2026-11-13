@@ -28,7 +28,8 @@
     tencentSecretId: '', tencentSecretKey: '',
     baiduAppId: '', baiduSecretKey: '',
     ttsEngine: 'google',
-    baiduTtsApiKey: '', baiduTtsSecretKey: ''
+    baiduTtsApiKey: '', baiduTtsSecretKey: '',
+    bilingualAuto: false
   };
 
   let current = null;       // 当前翻译结果 { original, translation, dict, context }
@@ -62,7 +63,7 @@
     els.btnBilingual.classList.toggle('bi-on', !!on);
     els.btnBilingual.title = on
       ? '双语对照已开启，点击关闭'
-      : '双语对照模式：网页段落下插入中文翻译';
+      : '双语对照模式：段落末尾出现「译」按钮，点哪段翻哪段';
   }
   els.btnBilingual.addEventListener('click', async () => {
     try {
@@ -397,6 +398,9 @@
     document.querySelector(`input[name="engine"][value="${settings.llmEngine}"]`).checked = true;
     document.querySelector(`input[name="tengine"][value="${settings.translateEngine}"]`).checked = true;
     document.querySelector(`input[name="sengine"][value="${settings.ttsEngine}"]`).checked = true;
+    document
+      .querySelector(`input[name="bimode"][value="${settings.bilingualAuto ? 'auto' : 'manual'}"]`)
+      .checked = true;
     els.chkEnabled.checked = settings.enabled;
     els.inBaseurl.value = settings.llmBaseURL;
     els.inApikey.value = settings.llmApiKey;
@@ -446,6 +450,7 @@
     const engine = document.querySelector('input[name="engine"]:checked');
     const tengine = document.querySelector('input[name="tengine"]:checked');
     const sengine = document.querySelector('input[name="sengine"]:checked');
+    const bimode = document.querySelector('input[name="bimode"]:checked');
     settings = {
       ...settings,
       enabled: els.chkEnabled.checked,
@@ -461,7 +466,8 @@
       baiduSecretKey: els.inBaiduKey.value.trim(),
       ttsEngine: sengine ? sengine.value : 'google',
       baiduTtsApiKey: els.inBaiduTtsId.value.trim(),
-      baiduTtsSecretKey: els.inBaiduTtsKey.value.trim()
+      baiduTtsSecretKey: els.inBaiduTtsKey.value.trim(),
+      bilingualAuto: bimode ? bimode.value === 'auto' : false
     };
     await chrome.storage.local.set({ settings });
     els.btnSaveSettings.textContent = '已保存 ✓';

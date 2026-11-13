@@ -5,7 +5,8 @@ const DEFAULTS = {
   tencentSecretId: '', tencentSecretKey: '',
   baiduAppId: '', baiduSecretKey: '',
   ttsEngine: 'google',
-  baiduTtsApiKey: '', baiduTtsSecretKey: ''
+  baiduTtsApiKey: '', baiduTtsSecretKey: '',
+  bilingualAuto: false
 };
 
 (async () => {
@@ -15,6 +16,9 @@ const DEFAULTS = {
   document.querySelector(`input[name="engine"][value="${s.llmEngine}"]`).checked = true;
   document.querySelector(`input[name="tengine"][value="${s.translateEngine}"]`).checked = true;
   document.querySelector(`input[name="sengine"][value="${s.ttsEngine}"]`).checked = true;
+  document
+    .querySelector(`input[name="bimode"][value="${s.bilingualAuto ? 'auto' : 'manual'}"]`)
+    .checked = true;
   document.getElementById('chk-enabled').checked = s.enabled;
   document.getElementById('in-baseurl').value = s.llmBaseURL;
   document.getElementById('in-apikey').value = s.llmApiKey;
@@ -64,6 +68,7 @@ document.getElementById('btn-save').addEventListener('click', async () => {
   const engine = document.querySelector('input[name="engine"]:checked');
   const tengine = document.querySelector('input[name="tengine"]:checked');
   const sengine = document.querySelector('input[name="sengine"]:checked');
+  const bimode = document.querySelector('input[name="bimode"]:checked');
   const next = {
     ...(settings || {}),
     enabled: document.getElementById('chk-enabled').checked,
@@ -79,7 +84,8 @@ document.getElementById('btn-save').addEventListener('click', async () => {
     baiduSecretKey: document.getElementById('in-baidu-key').value.trim(),
     ttsEngine: sengine ? sengine.value : 'google',
     baiduTtsApiKey: document.getElementById('in-baidu-tts-id').value.trim(),
-    baiduTtsSecretKey: document.getElementById('in-baidu-tts-key').value.trim()
+    baiduTtsSecretKey: document.getElementById('in-baidu-tts-key').value.trim(),
+    bilingualAuto: bimode ? bimode.value === 'auto' : false
   };
   await chrome.storage.local.set({ settings: next });
   document.getElementById('save-tip').textContent = '已保存 ✓';

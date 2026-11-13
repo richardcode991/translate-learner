@@ -176,7 +176,8 @@ function md5(str) {
   const dv = new DataView(padded.buffer);
   dv.setUint32(padded.length - 8, bitLen >>> 0, true);
   dv.setUint32(padded.length - 4, Math.floor(bitLen / 4294967296), true);
-  const rotr = (x, c) => (x >>> c) | (x << (32 - c));
+  // MD5 每轮用的是「循环左移」，写成右移会导致签名全错（百度 54001）
+  const rotl = (x, c) => ((x << c) | (x >>> (32 - c))) >>> 0;
   let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
   for (let off = 0; off < padded.length; off += 64) {
     const M = [];
@@ -190,7 +191,7 @@ function md5(str) {
       else { F = C ^ (B | ~D); g = (7 * i) % 16; }
       F = (F + A + K[i] + M[g]) >>> 0;
       A = D; D = C; C = B;
-      B = (B + rotr(F, S[i])) >>> 0;
+      B = (B + rotl(F, S[i])) >>> 0;
     }
     a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
   }
@@ -201,31 +202,45 @@ function md5(str) {
 }
 
 let lastBaiduAt = 0;
+// 错误码 → 可执行的中文提示
+const BAIDU_ERR = {
+  52001: '请求超时，稍后重试',
+  52002: '系统错误，稍后重试',
+  52003: 'APPID 未授权或填写有误，请核对百度翻译开放平台的 APPID',
+  54000: '必填参数为空',
+  54001: '签名错误：APPID 或密钥不正确。请确认二者来自同一个「通用翻译」应用，且没有多余空格/换行',
+  54003: '请求过于频繁（标准版 QPS=1），请降低速度',
+  54004: '账户余额不足',
+  54005: '长文本请求过于频繁，请稍后重试',
+  58000: '客户端 IP 不在白名单内，请在百度控制台关闭 IP 限制或加入当前 IP',
+  58001: '语言方向不支持，检查源/目标语言',
+  58002: '服务已关闭，请在百度控制台开通「通用翻译」'
+};
 async function baiduTranslate(text, s) {
-  if (!s.baiduAppId || !s.baiduSecretKey) {
+  const appid = String(s.baiduAppId || '').trim();
+  const key = String(s.baiduSecretKey || '').trim();
+  if (!appid || !key) {
     throw new Error('未配置百度翻译 APPID/密钥，请到设置页填写');
   }
+  const q = String(text).trim();
+  if (!q) throw new Error('待翻译内容为空');
   // 标准版 QPS=1，串行限速避免 54003
   const wait = lastBaiduAt + 1100 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastBaiduAt = Date.now();
-  const salt = String(Math.floor(Math.random() * 1e9));
-  const sign = md5(s.baiduAppId + text + salt + s.baiduSecretKey);
+  const salt = String(Date.now()) + String(Math.floor(Math.random() * 1000));
+  // 签名规则：md5(appid + q + salt + 密钥)，q 必须与请求体里的原文完全一致
+  const sign = md5(appid + q + salt + key);
   const res = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      q: text,
-      from: 'en',
-      to: 'zh',
-      appid: s.baiduAppId,
-      salt,
-      sign
-    }).toString()
+    body: new URLSearchParams({ q, from: 'en', to: 'zh', appid, salt, sign }).toString()
   });
   const data = await res.json().catch(() => ({}));
   if (data.error_code) {
-    throw new Error(`百度翻译错误 ${data.error_code}: ${data.error_msg}`);
+    const code = String(data.error_code);
+    const hint = BAIDU_ERR[code] || data.error_msg || '未知错误';
+    throw new Error(`百度翻译错误 ${code}：${hint}`);
   }
   const translation = (data.trans_result || []).map((t) => t.dst).join('\n');
   if (!translation) throw new Error('百度翻译返回内容为空');

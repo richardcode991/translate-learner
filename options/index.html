@@ -27,6 +27,12 @@
       <p class="hint">快捷键 Alt+Shift+T（Mac 为 ⌥⇧T）可随时开关划词翻译，浏览器图标上会显示 ON/OFF 角标。</p>
     </div>
     <div class="card">
+      <h3>双语对照阅读</h3>
+      <label><input type="radio" name="bimode" value="manual" /> 逐段按钮翻译（默认）：每段末尾出现「译」按钮，点哪段翻哪段</label>
+      <label><input type="radio" name="bimode" value="auto" /> 整页自动翻译：开启双语后自动翻译所有段落</label>
+      <p class="hint">逐段模式按需请求，不会触发 Google 免费接口的 429 限流；翻过的段落有缓存，不重复请求。</p>
+    </div>
+    <div class="card">
       <h3>快速翻译引擎</h3>
       <label><input type="radio" name="tengine" value="google" /> Google（免费免 Key，国内需代理）</label>
       <label><input type="radio" name="tengine" value="tencent" /> 腾讯云机器翻译（国内直连，每月 500 万字符免费）</label>
