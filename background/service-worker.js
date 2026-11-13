@@ -44,12 +44,36 @@ async function quickTranslate(text, settings) {
 }
 
 // Google gtx 接口（免费、无需 Key，国内需代理）
+// 免费接口对突发请求敏感（双语模式一次几十段会触发 429）：
+// 请求间强制最小间隔 + 429 指数退避重试
+let googleLastAt = 0;
+const GOOGLE_MIN_INTERVAL = 160;
 async function googleTranslate(text) {
   const url =
     'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&dj=1&q=' +
     encodeURIComponent(text);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('快译接口请求失败: ' + res.status);
+  const wait = googleLastAt + GOOGLE_MIN_INTERVAL - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  googleLastAt = Date.now();
+  let res = await fetch(url);
+  // 429：限流，退避重试最多 2 次（0.8s、1.6s，带抖动）
+  for (let i = 0; i < 2 && res.status === 429; i++) {
+    await new Promise((r) => setTimeout(r, 800 * (i + 1) + Math.random() * 400));
+    googleLastAt = Date.now();
+    res = await fetch(url);
+  }
+  if (res.status === 429) {
+    throw new Error(
+      'Google 免费翻译接口限流（429）。稍等十几秒再试；或在设置里把「快速翻译引擎」改为腾讯云 / 百度（国内直连、额度充足）'
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      '快译接口请求失败: ' +
+        res.status +
+        (res.status >= 500 ? '（Google 服务端异常，稍后重试）' : '')
+    );
+  }
   const data = await res.json();
   const translation = (data.sentences || []).map((s) => s.trans || '').join('');
   const dict = (data.dict || []).map((d) => ({

@@ -123,8 +123,16 @@
     if (data.error) {
       current = null;
       els.orig.textContent = data.original;
-      els.trans.textContent =
-        '翻译失败：' + data.error + '。若在国内网络环境，请检查代理；或在设置中将讲解引擎切换为「豆包网页版」（免代理）。';
+      const err = data.error || '';
+      let hint;
+      if (/429|限流/.test(err)) {
+        hint = '。这是接口限流，稍等十几秒再试即可；也可在设置里把「快速翻译引擎」换成腾讯云 / 百度（国内直连）';
+      } else if (/代理|网络|Failed to fetch|timeout/i.test(err)) {
+        hint = '。若在国内网络环境，请检查代理是否可用；或在设置里改用腾讯云 / 百度翻译引擎（国内直连）';
+      } else {
+        hint = '。请到设置页检查「快速翻译引擎」配置';
+      }
+      els.trans.textContent = '翻译失败：' + err + hint;
       els.trans.classList.add('error');
       setSaveState(false);
       return;
