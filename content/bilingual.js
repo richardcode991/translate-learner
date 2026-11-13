@@ -1,4 +1,6 @@
 // Content Script：双语对照阅读模式（段落下插入中文翻译）
+// 选块策略：TreeWalker 遍历文本节点 → 向上爬到"文本边界"（最外层且内容恰好
+// 等于该文本的祖先），不依赖固定标签清单，任意标签排版的正文均可覆盖
 (() => {
   const ctxAlive = () => {
     try {
@@ -10,19 +12,17 @@
   if (!ctxAlive()) return;
 
   const CLS = 'tl-bi-ext';
-  // 候选文本块（含 div：很多网站用 div 而非 p 排版）
-  const SEL =
-    'p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, figcaption, dd, dt, summary, div';
   const SKIP_SEL =
     'pre, code, kbd, samp, nav, header, footer, button, [role="button"], ' +
     '[aria-hidden="true"], [contenteditable="true"], textarea, input, select, ' +
     'script, style, noscript, svg, .tl-bi-ext';
-  // 这些块级子元素存在时，div 视为容器而不是文本块
+  // 这些块级子元素存在时，说明当前元素是容器而非文本块（交给子元素处理）
   const BLOCK_CHILDREN =
     'p, div, li, ul, ol, table, section, article, aside, h1, h2, h3, h4, h5, h6, ' +
-    'blockquote, pre, figure, dl, dt, dd, main, form, img, video, canvas, svg, iframe';
+    'blockquote, pre, figure, dl, dt, dd, main, form, video, canvas, svg, iframe';
   // 这些标签的译文插入到元素内部（插入到后面会破坏 HTML 结构）
   const INNER_TAGS = new Set(['TD', 'TH', 'LI', 'DD', 'DT', 'SUMMARY']);
+  const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
 
   let enabled = false;
   let observer = null;
@@ -41,22 +41,13 @@
 
   function isTranslatable(el) {
     if (el.dataset.tlBi === '1' || el.dataset.tlBi === 'skip') return false;
+    if (el === document.body || el === document.documentElement) return false;
     if (el.closest(SKIP_SEL)) return false;
-    const tag = el.tagName;
-    if (tag === 'DIV') {
-      // div 只有在没有块级子元素时才是文本块
-      if (el.querySelector(BLOCK_CHILDREN)) {
-        el.dataset.tlBi = 'skip'; // 容器结构固定，标记跳过
-        return false;
-      }
-    } else if (el.querySelector('p, div, li, ul, ol, table, blockquote, pre, img')) {
-      return false; // 非最深层的块交给子元素
-    }
-    const text = (el.innerText || '').replace(/\s+/g, ' ').trim();
-    // 长度阈值：标题 6、其他 10（不永久标记，内容变化后还能再检查）
-    const minLen = tag.startsWith('H') ? 6 : 10;
-    if (text.length < minLen || text.length > 5000) return false;
-    // 中英判定：中文字符占比高则跳过（永久标记）；英文字母需占 30% 以上
+    // 容器元素交给子元素处理
+    if (el.querySelector(BLOCK_CHILDREN)) return false;
+    const text = norm(el.innerText);
+    if (text.length < 6 || text.length > 5000) return false;
+    // 中文字符占比高则视为中文块（永久标记）；英文字母需占 30% 以上
     const cjk = (text.match(/[\u4e00-\u9fff]/g) || []).length;
     if (cjk / text.length > 0.25) {
       el.dataset.tlBi = 'skip';
@@ -68,10 +59,44 @@
   }
 
   function collectCandidates(root) {
+    const targets = new Set();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const t = node.nodeValue || '';
+        if (!/[A-Za-z]/.test(t)) return NodeFilter.FILTER_REJECT;
+        const el = node.parentElement;
+        if (!el || el.closest(SKIP_SEL)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      let el = n.parentElement;
+      // 混排容器（含块级子元素）中的散落文本节点：包一层 span 使其成为独立文本块
+      if (el.querySelector(BLOCK_CHILDREN)) {
+        if (norm(n.nodeValue).length < 6) continue; // 过短的散落文本不值得处理
+        const wrap = document.createElement('span');
+        el.insertBefore(wrap, n);
+        wrap.appendChild(n);
+        el = wrap;
+      }
+      // 向上爬到文本边界：最外层且完整内容恰好等于该文本的祖先
+      const base = norm(el.textContent);
+      let target = el;
+      let p = el.parentElement;
+      while (p && p !== document.body && p !== document.documentElement) {
+        if (p.closest(SKIP_SEL)) break;
+        if (norm(p.textContent) === base) {
+          target = p;
+          p = p.parentElement;
+        } else {
+          break;
+        }
+      }
+      targets.add(target);
+    }
     const out = [];
-    for (const el of root.querySelectorAll(SEL)) {
-      if (el.dataset.tlBi === '1') continue;
-      if (isTranslatable(el)) out.push(el);
+    for (const el of targets) {
+      if (!el.dataset.tlQueued && isTranslatable(el)) out.push(el);
     }
     return out;
   }
@@ -80,6 +105,8 @@
   const queue = [];
   let running = 0;
   function enqueue(el) {
+    if (el.dataset.tlQueued) return;
+    el.dataset.tlQueued = '1'; // 入队即标记，防止 MutationObserver 重扫导致重复
     queue.push(el);
     pump();
   }
@@ -93,6 +120,7 @@
       });
     }
   }
+
   // 全局只保留一个正在播放的音频（实际播放由 offscreen 页完成，
   // 页面 CSP（如 GitHub 的 media-src）会拦截内容脚本里的 blob: 媒体）
   let currentBtn = null;
@@ -148,7 +176,7 @@
   async function translateEl(el) {
     try {
       if (!el.isConnected || el.dataset.tlBi === '1') return;
-      const text = (el.innerText || '').replace(/\s+/g, ' ').trim();
+      const text = norm(el.innerText);
       if (!text) return;
       const res = await chrome.runtime.sendMessage({ type: 'PARA', text }).catch(() => null);
       if (!res || !res.ok || !res.translation) return;
@@ -182,17 +210,22 @@
     }
   }
 
-  function scanAddedNodes(roots) {
-    if (!roots.length) return;
-    const set = new Set();
-    for (const r of roots) {
-      if (r.nodeType !== 1) continue;
-      if (r.classList && r.classList.contains(CLS)) continue;
-      if (r.matches && r.matches(SEL)) set.add(r);
-      if (r.querySelectorAll) r.querySelectorAll(SEL).forEach((x) => set.add(x));
+  function scanAddedNodes(muts) {
+    const roots = new Set();
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType === 3) {
+          if (n.parentElement) roots.add(n.parentElement);
+        } else if (n.nodeType === 1) {
+          if (n.classList && n.classList.contains(CLS)) continue;
+          roots.add(n);
+        }
+      }
     }
-    for (const el of set) {
-      if (isTranslatable(el)) enqueue(el);
+    for (const r of roots) {
+      collectCandidates(r).forEach((el) => {
+        if (!el.dataset.tlBi) enqueue(el);
+      });
     }
   }
 
@@ -204,9 +237,7 @@
         clearTimeout(scanTimer);
         scanTimer = setTimeout(() => {
           if (!enabled) return;
-          const added = [];
-          for (const m of muts) added.push(...m.addedNodes);
-          scanAddedNodes(added);
+          scanAddedNodes(muts);
         }, 600);
       });
       observer.observe(document.body, { childList: true, subtree: true });
@@ -215,9 +246,10 @@
       observer = null;
       stopCurrent(); // 停掉正在播放的朗读
       document.querySelectorAll('.' + CLS).forEach((n) => n.remove());
+      document.querySelectorAll('[data-tl-bi]').forEach((n) => delete n.dataset.tlBi);
       document
-        .querySelectorAll('[data-tl-bi]')
-        .forEach((n) => delete n.dataset.tlBi);
+        .querySelectorAll('[data-tl-queued]')
+        .forEach((n) => delete n.dataset.tlQueued);
       queue.length = 0;
     }
   }
