@@ -1,0 +1,15 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 截图占位目录中的临时文件（截图本身需保留提交）
+!docs/screenshots/.gitkeep
+
+# 本地临时文件
+*.log
+*.tmp

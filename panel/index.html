@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>翻译学习助手</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="tabs">
+      <button class="tab active" data-tab="translate">翻译</button>
+      <button class="tab" data-tab="vocab">生词本 <span id="vocab-count" class="badge"></span></button>
+      <button class="tab" data-tab="review">复习</button>
+    </div>
+    <button id="btn-bilingual" class="icon-btn" title="双语对照模式：网页段落下插入中文翻译">双语</button>
+    <button id="btn-settings" class="icon-btn" title="设置">⚙</button>
+  </header>
+
+  <!-- 翻译 Tab -->
+  <main id="tab-translate" class="tab-page active">
+    <section class="card">
+      <div class="row-between">
+        <h3>原文</h3>
+        <div>
+          <button id="btn-speak-orig" class="icon-btn" title="朗读">🔊</button>
+        </div>
+      </div>
+      <p id="orig-text" class="orig">选中网页中的英文文本，翻译会自动出现在这里。</p>
+    </section>
+
+    <section class="card">
+      <h3>翻译</h3>
+      <p id="trans-text" class="trans">—</p>
+      <div id="dict-box" class="dict hidden"></div>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h3>深度讲解</h3>
+        <button id="btn-deep" class="primary">生成讲解</button>
+      </div>
+      <div id="deep-loading" class="loading hidden">正在生成讲解…</div>
+      <div id="deep-error" class="error hidden"></div>
+      <pre id="deep-text" class="deep hidden"></pre>
+    </section>
+
+    <button id="btn-save" class="save-btn">☆ 收藏到生词本</button>
+  </main>
+
+  <!-- 生词本 Tab -->
+  <main id="tab-vocab" class="tab-page">
+    <input id="vocab-search" class="search" placeholder="搜索单词或释义…" />
+    <ul id="vocab-list" class="vocab-list"></ul>
+    <div id="vocab-empty" class="empty hidden">生词本还是空的，去网页里选几个英文单词吧。</div>
+  </main>
+
+  <!-- 复习 Tab -->
+  <main id="tab-review" class="tab-page">
+    <div id="review-card" class="review-card hidden">
+      <div class="review-context" id="review-context"></div>
+      <h2 id="review-word" class="review-word"></h2>
+      <div id="review-answer" class="review-answer hidden">
+        <p id="review-trans" class="trans"></p>
+        <button id="btn-speak-review" class="icon-btn">🔊</button>
+      </div>
+      <div id="review-actions" class="review-actions">
+        <button id="btn-show-answer" class="primary wide">显示答案</button>
+        <div id="grade-buttons" class="grade hidden">
+          <button data-grade="0" class="grade-btn again">不认识</button>
+          <button data-grade="1" class="grade-btn fuzzy">模糊</button>
+          <button data-grade="2" class="grade-btn good">认识</button>
+        </div>
+      </div>
+    </div>
+    <div id="review-empty" class="empty hidden">没有待复习的生词。</div>
+    <p id="review-progress" class="progress"></p>
+  </main>
+
+  <!-- 设置页（面板内嵌，替代独立 options 页入口） -->
+  <main id="tab-settings" class="tab-page">
+    <section class="card">
+      <h3>划词模式</h3>
+      <label><input type="radio" name="trigger" value="auto" /> 选中即翻译</label>
+      <label><input type="radio" name="trigger" value="alt" /> 按住 Alt 键选词才翻译（Mac 为 Option ⌥ 键）</label>
+      <label class="switch-row">
+        <input type="checkbox" id="chk-enabled" /> 启用划词翻译（快捷键 Alt+Shift+T，Mac 为 ⌥⇧T）
+      </label>
+    </section>
+    <section class="card">
+      <h3>快速翻译引擎</h3>
+      <label><input type="radio" name="tengine" value="google" /> Google（免费免 Key，国内需代理）</label>
+      <label><input type="radio" name="tengine" value="tencent" /> 腾讯云机器翻译（国内直连，每月 500 万字符免费）</label>
+      <label><input type="radio" name="tengine" value="baidu" /> 百度翻译开放平台（国内直连，每月 5 万字符免费，限速 1 次/秒）</label>
+      <div id="tencent-fields">
+        <label>SecretId
+          <input id="in-ten-id" placeholder="AKID..." />
+        </label>
+        <label>SecretKey
+          <input id="in-ten-key" type="password" />
+        </label>
+        <p class="hint">获取方式：腾讯云控制台 → 机器翻译 TMT → 开通服务 → API 密钥管理。</p>
+      </div>
+      <div id="baidu-fields">
+        <label>APPID
+          <input id="in-baidu-id" placeholder="2024xxxx" />
+        </label>
+        <label>密钥
+          <input id="in-baidu-key" type="password" />
+        </label>
+        <p class="hint">获取方式：百度翻译开放平台 fanyi-api.baidu.com → 注册并开通通用文本翻译 → 管理控制台查看 APPID 和密钥。</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>朗读引擎</h3>
+      <label><input type="radio" name="sengine" value="google" /> Google 在线语音（音质较好，国内需代理）</label>
+      <label><input type="radio" name="sengine" value="tencent" /> 腾讯云语音合成（国内直连，复用快速翻译的腾讯密钥，免费资源包 800 万字符）</label>
+      <label><input type="radio" name="sengine" value="baidu" /> 百度语音合成（国内直连，需单独申请 API Key）</label>
+      <label><input type="radio" name="sengine" value="system" /> 系统内置语音（离线，无需配置）</label>
+      <div id="baidu-tts-fields">
+        <label>API Key
+          <input id="in-baidu-tts-id" placeholder="百度智能云语音技术应用的 API Key" />
+        </label>
+        <label>Secret Key
+          <input id="in-baidu-tts-key" type="password" />
+        </label>
+        <p class="hint">获取方式：百度智能云控制台 → 语音技术 → 应用管理 → 创建应用（勾选语音合成），获取 API Key 和 Secret Key。注意这与百度翻译的 APPID 不是同一套凭证。</p>
+      </div>
+      <p class="hint">选择腾讯朗读时：需已在「快速翻译引擎」配置腾讯 SecretId/SecretKey，并到语音合成控制台领取免费资源包；任一在线引擎失败都会自动回退系统语音。</p>
+    </section>
+
+    <section class="card">
+      <h3>深度讲解引擎</h3>
+      <label><input type="radio" name="engine" value="openai" /> OpenAI 兼容接口（DeepSeek/Kimi/OpenAI 等，需 API Key）</label>
+      <label><input type="radio" name="engine" value="doubao" /> 豆包网页版（免 Key，复用浏览器登录态）</label>
+      <p class="hint">选择豆包网页版时，请确保已在 Chrome 中登录 www.doubao.com 且能正常对话；讲解请求会使用你的豆包账号，对话记录会留在豆包账号里。</p>
+      <div id="openai-fields">
+        <label>接口地址 Base URL
+          <input id="in-baseurl" placeholder="https://api.deepseek.com" />
+        </label>
+        <label>API Key
+          <input id="in-apikey" type="password" placeholder="sk-..." />
+        </label>
+        <label>模型名称
+          <input id="in-model" placeholder="deepseek-chat" />
+        </label>
+        <p class="hint">Key 仅保存在本地浏览器，不会上传到任何第三方服务器。DeepSeek / Kimi / OpenAI 等 OpenAI 兼容接口均可。</p>
+      </div>
+      <button id="btn-save-settings" class="primary wide">保存设置</button>
+    </section>
+  </main>
+
+  <script src="panel.js"></script>
+</body>
+</html>

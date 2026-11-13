@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>翻译学习助手 - 设置</title>
+  <style>
+    body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #2c2c2a; background: #fafaf8; padding: 24px; }
+    .wrap { max-width: 520px; margin: 0 auto; }
+    h2 { font-size: 16px; font-weight: 500; margin-bottom: 12px; color: #0c447c; }
+    .card { background: #fff; border: 1px solid #d3d1c7; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    h3 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+    label { display: block; margin: 10px 0; }
+    input[type="text"], input[type="password"], input:not([type]) { width: 100%; padding: 8px 10px; border: 1px solid #d3d1c7; border-radius: 8px; margin-top: 4px; font-size: 13px; }
+    .switch-row { display: flex; align-items: center; gap: 8px; }
+    .hint { color: #888780; font-size: 12px; margin: 6px 0; }
+    button { background: #185fa5; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>英文翻译学习助手 · 设置</h2>
+    <div class="card">
+      <h3>划词模式</h3>
+      <label><input type="radio" name="trigger" value="auto" /> 选中即翻译</label>
+      <label><input type="radio" name="trigger" value="alt" /> 按住 Alt 键选词才翻译（Mac 为 Option ⌥ 键）</label>
+      <label class="switch-row"><input type="checkbox" id="chk-enabled" /> 启用划词翻译</label>
+      <p class="hint">快捷键 Alt+Shift+T（Mac 为 ⌥⇧T）可随时开关划词翻译，浏览器图标上会显示 ON/OFF 角标。</p>
+    </div>
+    <div class="card">
+      <h3>快速翻译引擎</h3>
+      <label><input type="radio" name="tengine" value="google" /> Google（免费免 Key，国内需代理）</label>
+      <label><input type="radio" name="tengine" value="tencent" /> 腾讯云机器翻译（国内直连，每月 500 万字符免费）</label>
+      <label><input type="radio" name="tengine" value="baidu" /> 百度翻译开放平台（国内直连，每月 5 万字符免费，限速 1 次/秒）</label>
+      <div id="tencent-fields">
+        <label>SecretId <input id="in-ten-id" placeholder="AKID..." /></label>
+        <label>SecretKey <input id="in-ten-key" type="password" /></label>
+        <p class="hint">获取方式：腾讯云控制台 → 机器翻译 TMT → 开通服务 → API 密钥管理。</p>
+      </div>
+      <div id="baidu-fields">
+        <label>APPID <input id="in-baidu-id" placeholder="2024xxxx" /></label>
+        <label>密钥 <input id="in-baidu-key" type="password" /></label>
+        <p class="hint">获取方式：百度翻译开放平台 fanyi-api.baidu.com → 注册并开通通用文本翻译 → 管理控制台查看 APPID 和密钥。</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3>朗读引擎</h3>
+      <label><input type="radio" name="sengine" value="google" /> Google 在线语音（音质较好，国内需代理）</label>
+      <label><input type="radio" name="sengine" value="tencent" /> 腾讯云语音合成（国内直连，复用快速翻译的腾讯密钥，免费资源包 800 万字符）</label>
+      <label><input type="radio" name="sengine" value="baidu" /> 百度语音合成（国内直连，需单独申请 API Key）</label>
+      <label><input type="radio" name="sengine" value="system" /> 系统内置语音（离线，无需配置）</label>
+      <div id="baidu-tts-fields">
+        <label>API Key <input id="in-baidu-tts-id" placeholder="百度智能云语音技术应用的 API Key" /></label>
+        <label>Secret Key <input id="in-baidu-tts-key" type="password" /></label>
+        <p class="hint">获取方式：百度智能云控制台 → 语音技术 → 应用管理 → 创建应用（勾选语音合成）。注意这与百度翻译的 APPID 不是同一套凭证。</p>
+      </div>
+      <p class="hint">选择腾讯朗读时：需已配置腾讯 SecretId/SecretKey，并到语音合成控制台领取免费资源包；任一在线引擎失败都会自动回退系统语音。</p>
+    </div>
+    <div class="card">
+      <h3>深度讲解引擎</h3>
+      <label><input type="radio" name="engine" value="openai" /> OpenAI 兼容接口（DeepSeek/Kimi/OpenAI 等，需 API Key）</label>
+      <label><input type="radio" name="engine" value="doubao" /> 豆包网页版（免 Key，复用浏览器登录态）</label>
+      <p class="hint">选择豆包网页版时，请确保已在 Chrome 中登录 www.doubao.com 且能正常对话；讲解请求会使用你的豆包账号，对话记录会留在豆包账号里。</p>
+      <div id="openai-fields">
+        <label>接口地址 Base URL <input id="in-baseurl" placeholder="https://api.deepseek.com" /></label>
+        <label>API Key <input id="in-apikey" type="password" placeholder="sk-..." /></label>
+        <label>模型名称 <input id="in-model" placeholder="deepseek-chat" /></label>
+        <p class="hint">Key 仅保存在本地浏览器（chrome.storage.local），不经过任何第三方服务器。DeepSeek / Kimi / 通义 / OpenAI 等 OpenAI 兼容接口均可使用。</p>
+      </div>
+      <button id="btn-save">保存设置</button>
+      <span id="save-tip" style="margin-left:10px; color:#0f6e56;"></span>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "英文翻译学习助手",
+  "version": "0.1.0",
+  "description": "划词翻译英文内容，面板深度讲解（词根/语法/例句），生词本与复习，边读边学。",
+  "permissions": ["storage", "sidePanel", "offscreen"],
+  "host_permissions": [
+    "https://translate.googleapis.com/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "side_panel": {
+    "default_path": "panel/index.html"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "options_page": "options/index.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/selection.js", "content/bilingual.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "打开翻译学习面板"
+  },
+  "commands": {
+    "toggle-translation": {
+      "suggested_key": { "default": "Alt+Shift+T" },
+      "description": "开关划词翻译"
+    }
+  }
+}
