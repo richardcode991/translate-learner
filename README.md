@@ -1,14 +1,20 @@
-# 英文翻译学习助手 (Translate Learner)
+# Translate Learner — 英文翻译学习助手 | Chrome 划词翻译插件
 
 [![Chrome](https://img.shields.io/badge/Chrome-114%2B-4285F4?logo=googlechrome&logoColor=white)](https://www.google.com/chrome/)
 [![Manifest](https://img.shields.io/badge/Manifest-V3-34A853)](https://developer.chrome.com/docs/extensions/develop/concepts/mv3-overview)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 
-一款「边读边学」的 Chrome 划词翻译插件：**划词即译 → 侧边面板秒出翻译 → AI 深度讲解 → 一键收藏生词 → 卡片复习**，并支持**双语对照阅读**（原文与翻译同屏对照、逐段朗读）。
+**Chrome 划词翻译 + AI 深度讲解 + 双语对照阅读 + 生词本复习**，一款「边读边学」的浏览器插件。
+
+> **English**: Translate Learner is a Chrome extension for English learners — select-to-translate any text on the web, get AI-powered deep explanations (word roots, grammar, collocations, example sentences), read in bilingual side-by-side mode, and build your vocabulary with spaced-repetition flashcards.
+
+**核心流程**：划词即译 → 侧边面板秒出翻译 → AI 深度讲解 → 一键收藏生词 → 卡片复习，并支持**双语对照沉浸式阅读**（原文与翻译同屏对照、逐段朗读）。
+
+**关键词**：划词翻译 · 沉浸式翻译 · 双语对照 · 英语学习 · 生词本 · 艾宾浩斯复习 · AI 讲解 · Chrome Extension · Select to Translate · Bilingual Reading · Immersive Translation · Vocabulary Builder · DeepSeek · 豆包 · 腾讯云 · 百度翻译
 
 <div align="center">
-  <img src="docs/screenshots/01-panel-translate.png" alt="面板总览：划词翻译 + 词典释义 + 深度讲解" width="380" />
-  <img src="docs/screenshots/04-bilingual.png" alt="双语对照阅读模式" width="380" />
+  <img src="docs/screenshots/01-panel-translate.png" alt="Chrome 划词翻译插件面板：翻译结果 + 词典释义 + AI 深度讲解" width="380" />
+  <img src="docs/screenshots/04-bilingual.png" alt="双语对照沉浸式翻译阅读模式：英文段落下方插入中文翻译，带朗读按钮" width="380" />
 </div>
 
 ---
