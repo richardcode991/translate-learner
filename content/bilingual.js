@@ -15,7 +15,10 @@
   const SKIP_SEL =
     'pre, code, kbd, samp, nav, header, footer, button, [role="button"], ' +
     '[aria-hidden="true"], [contenteditable="true"], textarea, input, select, ' +
-    'script, style, noscript, svg, .tl-bi-ext';
+    'script, style, noscript, svg, .tl-bi-ext, ' +
+    // 广告相关容器不翻译
+    '[class*="advert"], [id*="advert"], [class*="sponsor"], [class*="promo"], ' +
+    '[class*="browsi"], [id^="google_ads"], [class*="ad-entity"], [class*="programtic"]';
   // 这些块级子元素存在时，说明当前元素是容器而非文本块（交给子元素处理）
   const BLOCK_CHILDREN =
     'p, div, li, ul, ol, table, section, article, aside, h1, h2, h3, h4, h5, h6, ' +
@@ -38,6 +41,12 @@
     `font-size:.9em;opacity:.55;padding:0 4px;vertical-align:baseline;}` +
     `.tl-bi-speak:hover{opacity:1;}`;
   document.documentElement.appendChild(style);
+
+  // 行内元素：段内的 a/span/b/em 等不应独立成块，需并入所在段落一起翻译
+  const INLINE_TAGS = new Set(
+    ('A SPAN B STRONG EM I U S SMALL SUB SUP TIME MARK ABBR CITE Q LABEL ' +
+      'FONT BIG DEL INS DATA BDI BDO OUTPUT TT VAR WBR RUBY RT RP').split(' ')
+  );
 
   function isTranslatable(el) {
     if (el.dataset.tlBi === '1' || el.dataset.tlBi === 'skip') return false;
@@ -90,6 +99,23 @@
           p = p.parentElement;
         } else {
           break;
+        }
+      }
+      // 行内元素（如段内 <a>）并入其所在的块级段落，避免译文插进句子中间
+      if (INLINE_TAGS.has(target.tagName)) {
+        let b = target.parentElement;
+        while (b && INLINE_TAGS.has(b.tagName) && b !== document.body) {
+          b = b.parentElement;
+        }
+        if (
+          b &&
+          b !== document.body &&
+          b !== document.documentElement &&
+          !b.querySelector(BLOCK_CHILDREN) &&
+          !b.closest(SKIP_SEL)
+        ) {
+          targets.add(b);
+          continue;
         }
       }
       targets.add(target);
