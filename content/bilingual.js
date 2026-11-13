@@ -36,7 +36,10 @@
   style.textContent =
     `.${CLS}{margin:4px 0 10px;padding:2px 10px;border-left:3px solid #85b7eb;` +
     `color:#40556b;font-size:.92em;line-height:1.6;background:#f4f8fd;` +
-    `border-radius:0 6px 6px 0;white-space:pre-wrap;word-break:break-word;}` +
+    `border-radius:0 6px 6px 0;white-space:pre-wrap;word-break:break-word;` +
+    // 抬到站点隐形覆盖链接（如 Google News 整卡铺满的空 <a>）之上，
+    // 否则点击译文/朗读按钮会被覆盖层截走触发跳转
+    `position:relative;z-index:1;}` +
     `.tl-bi-speak{border:none;background:transparent;cursor:pointer;` +
     `font-size:.9em;opacity:.55;padding:0 4px;vertical-align:baseline;}` +
     `.tl-bi-speak:hover{opacity:1;}`;
@@ -252,12 +255,44 @@
         e.preventDefault();
         speakOriginal(btn);
       });
+      // 站点级事件委托（如 Google News 的 jsaction，整卡 <a> 包裹）会
+      // 把按钮点击当成卡片点击触发跳转：拦截按钮上全部鼠标事件的冒泡
+      for (const evt of ['pointerdown', 'mousedown', 'mouseup', 'auxclick']) {
+        btn.addEventListener(evt, (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        });
+      }
       div.appendChild(btn);
-      if (INNER_TAGS.has(el.tagName)) {
+      // 译文块整体拦截事件冒泡：防止站点级委托（Google News 的 jsaction
+      // 卡片点击）把对译文区域的点击当成卡片点击触发跳转。
+      // 注意不 preventDefault（保留文本选择能力），拦截交给按钮自己
+      for (const evt of ['click', 'pointerdown', 'mousedown', 'mouseup', 'auxclick']) {
+        div.addEventListener(evt, (e) => e.stopPropagation());
+      }
+      if (INNER_TAGS.has(el.tagName) && !el.closest('a[href]')) {
         // 表格单元格/列表项：插入到内部，避免破坏结构
         el.appendChild(div);
       } else {
-        el.insertAdjacentElement('afterend', div);
+        // ① 块在链接内部时优先插到链接外，避免点击触发跳转；
+        // ② 但插入点的父级若是 flex/grid（如 GitHub topics 的卡片行），
+        //    译文会成为被挤压的 flex 子项（左右排列、文字挤扁），
+        //    此时改插到元素内部，保持上下布局
+        let at = el;
+        const anchor = el.closest('a[href]');
+        if (anchor && anchor !== el) {
+          const pd = anchor.parentElement
+            ? getComputedStyle(anchor.parentElement).display
+            : 'block';
+          if (!/^(inline-)?(flex|grid)/.test(pd)) at = anchor;
+        }
+        const atParent = at.parentElement;
+        const pd2 = atParent ? getComputedStyle(atParent).display : 'block';
+        if (/^(inline-)?(flex|grid)/.test(pd2)) {
+          el.appendChild(div);
+        } else {
+          at.insertAdjacentElement('afterend', div);
+        }
       }
       el.dataset.tlBi = '1';
     } catch {
