@@ -75,6 +75,9 @@
         if (!/[A-Za-z]/.test(t)) return NodeFilter.FILTER_REJECT;
         const el = node.parentElement;
         if (!el || el.closest(SKIP_SEL)) return NodeFilter.FILTER_REJECT;
+        // 跳过不可见文本（display:none 等）：只翻译当前所见，
+        // 折叠/展开类交互（如 "see more"）展开后再补翻新可见部分
+        if (!el.getClientRects().length) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -88,16 +91,26 @@
         wrap.appendChild(n);
         el = wrap;
       }
-      // 向上爬到文本边界：最外层且完整内容恰好等于该文本的祖先
+      // 向上爬到文本边界：最外层且完整内容恰好等于该文本的祖先。
+      // 保留完整祖先链：若最外层等值祖先是容器（含块级子元素，如
+      // <div class="desc"><p>正文</p></div>），不能选它——否则容器被
+      // isTranslatable 跳过后内层块永远漏译。应取链上最外层的非容器元素
       const base = norm(el.textContent);
-      let target = el;
+      const chain = [el];
       let p = el.parentElement;
       while (p && p !== document.body && p !== document.documentElement) {
         if (p.closest(SKIP_SEL)) break;
         if (norm(p.textContent) === base) {
-          target = p;
+          chain.push(p);
           p = p.parentElement;
         } else {
+          break;
+        }
+      }
+      let target = chain[0];
+      for (let i = chain.length - 1; i >= 0; i--) {
+        if (!chain[i].querySelector(BLOCK_CHILDREN)) {
+          target = chain[i];
           break;
         }
       }
@@ -111,12 +124,15 @@
           b &&
           b !== document.body &&
           b !== document.documentElement &&
+          !b.dataset.tlBi &&
           !b.querySelector(BLOCK_CHILDREN) &&
           !b.closest(SKIP_SEL)
         ) {
           targets.add(b);
           continue;
         }
+        // 所在段落已翻译或不可用（如 "see more" 展开场景）：
+        // 行内元素保持独立成块，展开的新文本可单独补翻
       }
       targets.add(target);
     }
@@ -127,12 +143,21 @@
     return out;
   }
 
-  // 翻译队列（并发 4）
+  // 翻译队列（并发 4）+ 页面级已翻译文本去重
+  // （同一段原文被两级候选选中时——如网站脚本延迟把文本包进容器，
+  //  figure 和 figcaption 先后被扫描——只出一份译文）
   const queue = [];
+  const translatedTexts = new Set();
   let running = 0;
   function enqueue(el) {
     if (el.dataset.tlQueued) return;
+    const key = norm(el.textContent);
+    if (translatedTexts.has(key)) {
+      el.dataset.tlBi = 'skip'; // 同原文已有译文，标记跳过
+      return;
+    }
     el.dataset.tlQueued = '1'; // 入队即标记，防止 MutationObserver 重扫导致重复
+    translatedTexts.add(key);
     queue.push(el);
     pump();
   }
@@ -205,7 +230,11 @@
       const text = norm(el.innerText);
       if (!text) return;
       const res = await chrome.runtime.sendMessage({ type: 'PARA', text }).catch(() => null);
-      if (!res || !res.ok || !res.translation) return;
+      if (!res || !res.ok || !res.translation) {
+        // 翻译失败：释放去重键，后续重扫可再次尝试
+        translatedTexts.delete(norm(el.textContent));
+        return;
+      }
       if (!el.isConnected || el.dataset.tlBi === '1') return;
       const div = document.createElement('div');
       div.className = CLS;
@@ -236,37 +265,46 @@
     }
   }
 
-  function scanAddedNodes(muts) {
-    const roots = new Set();
-    for (const m of muts) {
-      for (const n of m.addedNodes) {
-        if (n.nodeType === 3) {
-          if (n.parentElement) roots.add(n.parentElement);
-        } else if (n.nodeType === 1) {
-          if (n.classList && n.classList.contains(CLS)) continue;
-          roots.add(n);
-        }
-      }
-    }
-    for (const r of roots) {
-      collectCandidates(r).forEach((el) => {
-        if (!el.dataset.tlBi) enqueue(el);
-      });
-    }
-  }
-
   function apply(on) {
     enabled = on;
     if (on) {
       collectCandidates(document.body).forEach(enqueue);
+      // 累积 mutation 涉及的根节点，防抖后统一重扫
+      // （回调里的 muts 数组每批独立，直接在回调里防抖会丢失前几批的节点）
+      const pendingRoots = new Set();
       observer = new MutationObserver((muts) => {
+        for (const m of muts) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType === 3) {
+              if (n.parentElement) pendingRoots.add(n.parentElement);
+            } else if (n.nodeType === 1) {
+              if (n.classList && n.classList.contains(CLS)) continue;
+              pendingRoots.add(n);
+            }
+          }
+          // style/class/hidden 属性变化（如 "see more" 展开隐藏文本）：
+          // 变为可见的内容需要补翻
+          if (m.type === 'attributes' && m.target.nodeType === 1) {
+            pendingRoots.add(m.target);
+          }
+        }
         clearTimeout(scanTimer);
         scanTimer = setTimeout(() => {
           if (!enabled) return;
-          scanAddedNodes(muts);
+          for (const r of pendingRoots) {
+            collectCandidates(r).forEach((el) => {
+              if (!el.dataset.tlBi) enqueue(el);
+            });
+          }
+          pendingRoots.clear();
         }, 600);
       });
-      observer.observe(document.body, { childList: true, subtree: true });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden']
+      });
     } else {
       if (observer) observer.disconnect();
       observer = null;
@@ -277,6 +315,7 @@
         .querySelectorAll('[data-tl-queued]')
         .forEach((n) => delete n.dataset.tlQueued);
       queue.length = 0;
+      translatedTexts.clear();
     }
   }
 
